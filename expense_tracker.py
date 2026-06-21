@@ -3,11 +3,11 @@ import os
 from datetime import datetime
 
 FILE_NAME = "expenses.csv"
+BUDGET_FILE = "budget.txt"
 FIELDS = ["ID", "Date", "Category", "Amount", "Description"]
 
 
 def initialize_file():
-    """Initializes the CSV file with headers if it doesn't exist."""
     if not os.path.exists(FILE_NAME):
         with open(FILE_NAME, "w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
@@ -15,26 +15,73 @@ def initialize_file():
 
 
 def _load_expenses():
-    """Helper function to safely load all expenses as a list of dicts."""
     if not os.path.exists(FILE_NAME):
         return []
     try:
         with open(FILE_NAME, "r", newline="", encoding="utf-8") as file:
             return list(csv.DictReader(file))
     except (IOError, csv.Error):
-        print(" Error reading the data file.")
+        print("Error reading the data file.")
         return []
 
 
 def _save_expenses(rows):
-    """Helper function to safely save all expenses back to the CSV."""
     try:
         with open(FILE_NAME, "w", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, fieldnames=FIELDS)
             writer.writeheader()
             writer.writerows(rows)
     except IOError:
-        print(" Error writing to the data file.")
+        print("Error writing to the data file.")
+
+
+def _get_budget():
+    if not os.path.exists(BUDGET_FILE):
+        return 0.0
+    try:
+        with open(BUDGET_FILE, "r") as file:
+            return float(file.read().strip())
+    except (ValueError, IOError):
+        return 0.0
+
+
+def set_budget():
+    print("\n--- Set Monthly Budget ---")
+    try:
+        budget = float(input("Enter monthly budget limit (₹): "))
+        if budget <= 0:
+            print("Budget must be greater than zero!")
+            return
+        with open(BUDGET_FILE, "w") as file:
+            file.write(f"{budget:.2f}")
+        print(f"Monthly budget set to ₹{budget:.2f}")
+    except ValueError:
+        print("Invalid input! Please enter a numeric value.")
+
+
+def _check_budget_alerts(new_amount=0.0):
+    budget = _get_budget()
+    if budget == 0.0:
+        return
+
+    current_month = datetime.now().strftime("%Y-%m")
+    data = _load_expenses()
+
+    spent = sum(
+        float(row["Amount"])
+        for row in data
+        if row["Date"].startswith(current_month)
+    )
+    total_projected = spent + new_amount
+
+    if total_projected > budget:
+        print(
+            f"\nALERT: You have EXCEEDED your budget! (Spent: ₹{total_projected:.2f} / Budget: ₹{budget:.2f})"
+        )
+    elif total_projected >= (budget * 0.8):
+        print(
+            f"\nWARNING: You have used {((total_projected/budget)*100):.1f}% of your budget! (Spent: ₹{total_projected:.2f} / Budget: ₹{budget:.2f})"
+        )
 
 
 def add_expense():
@@ -42,22 +89,23 @@ def add_expense():
 
     category = input("Category: ").strip()
     if not category:
-        print(" Category cannot be empty!")
+        print("Category cannot be empty!")
         return
 
     try:
         amount = float(input("Amount: "))
         if amount <= 0:
-            print(" Amount must be greater than zero!")
+            print("Amount must be greater than zero!")
             return
     except ValueError:
-        print(" Invalid amount! Please enter a number.")
+        print("Invalid amount! Please enter a number.")
         return
 
     description = input("Description: ").strip()
     date = datetime.now().strftime("%Y-%m-%d")
 
-    # Generate a unique ID based on the last row's ID
+    _check_budget_alerts(amount)
+
     existing_data = _load_expenses()
     next_id = int(existing_data[-1]["ID"]) + 1 if existing_data else 1
 
@@ -126,7 +174,7 @@ def monthly_summary():
 
     monthly = {}
     for row in data:
-        month = row["Date"][:7]  # Extracts YYYY-MM
+        month = row["Date"][:7]
         monthly[month] = monthly.get(month, 0.0) + float(row["Amount"])
 
     print("\n--- Monthly Summary ---")
@@ -177,8 +225,6 @@ def delete_expense():
         return
 
     target_id = input("\nEnter ID of expense to delete: ").strip()
-
-    # Filter out the item to delete
     updated_data = [row for row in data if row["ID"] != target_id]
 
     if len(updated_data) == len(data):
@@ -215,16 +261,30 @@ def export_report():
             report.write("\n" + "=" * 45 + "\n")
             report.write(f"TOTAL EXPENSE = ₹{total:.2f}\n")
 
-        print(f"📄 Report exported successfully as {report_name}")
+        print(f"Report exported successfully as {report_name}")
     except IOError:
         print("Failed to write report file.")
 
 
 def menu():
     while True:
+        budget = _get_budget()
+        current_month = datetime.now().strftime("%Y-%m")
+        data = _load_expenses()
+        month_spent = sum(
+            float(row["Amount"])
+            for row in data
+            if row["Date"].startswith(current_month)
+        )
+
         print("\n" + "=" * 40)
         print("        SMART EXPENSE TRACKER")
         print("=" * 40)
+        if budget > 0:
+            print(
+                f"Status This Month: ₹{month_spent:.2f} / Budget: ₹{budget:.2f}"
+            )
+            print("-" * 40)
         print("1. Add Expense")
         print("2. View Expenses")
         print("3. Total Expense")
@@ -234,9 +294,10 @@ def menu():
         print("7. Search Category")
         print("8. Delete Expense")
         print("9. Export Report")
+        print("B. Set Monthly Budget")
         print("0. Exit")
 
-        choice = input("\nEnter choice: ").strip()
+        choice = input("\nEnter choice: ").strip().upper()
 
         if choice == "1":
             add_expense()
@@ -256,11 +317,13 @@ def menu():
             delete_expense()
         elif choice == "9":
             export_report()
+        elif choice == "B":
+            set_budget()
         elif choice == "0":
             print("Goodbye!")
             break
         else:
-            print("❌ Invalid choice. Please try again.")
+            print("Invalid choice. Please try again.")
 
 
 if __name__ == "__main__":
