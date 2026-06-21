@@ -1,2 +1,4 @@
-Date,Category,Amount,Description
-2026-06-19,food,100.0,pizza
+ID,Date,Category,Amount,Description
+1,2026-06-21,Food,250.00,Lunch
+2,2026-06-21,electricity,1000.00,bill
+3,2026-06-21,water,50.00,drum
