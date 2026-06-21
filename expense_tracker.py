@@ -3,239 +3,227 @@ import os
 from datetime import datetime
 
 FILE_NAME = "expenses.csv"
+FIELDS = ["ID", "Date", "Category", "Amount", "Description"]
 
 
 def initialize_file():
+    """Initializes the CSV file with headers if it doesn't exist."""
     if not os.path.exists(FILE_NAME):
-        with open(FILE_NAME, "w", newline="") as file:
+        with open(FILE_NAME, "w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
-            writer.writerow(["Date", "Category", "Amount", "Description"])
+            writer.writerow(FIELDS)
+
+
+def _load_expenses():
+    """Helper function to safely load all expenses as a list of dicts."""
+    if not os.path.exists(FILE_NAME):
+        return []
+    try:
+        with open(FILE_NAME, "r", newline="", encoding="utf-8") as file:
+            return list(csv.DictReader(file))
+    except (IOError, csv.Error):
+        print(" Error reading the data file.")
+        return []
+
+
+def _save_expenses(rows):
+    """Helper function to safely save all expenses back to the CSV."""
+    try:
+        with open(FILE_NAME, "w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+    except IOError:
+        print(" Error writing to the data file.")
 
 
 def add_expense():
     print("\n--- Add Expense ---")
 
-    category = input("Category: ")
-    amount = input("Amount: ")
-    description = input("Description: ")
-
-    date = datetime.now().strftime("%Y-%m-%d")
-
-    try:
-        amount = float(amount)
-    except ValueError:
-        print("Invalid amount!")
+    category = input("Category: ").strip()
+    if not category:
+        print(" Category cannot be empty!")
         return
 
-    with open(FILE_NAME, "a", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow([date, category, amount, description])
+    try:
+        amount = float(input("Amount: "))
+        if amount <= 0:
+            print(" Amount must be greater than zero!")
+            return
+    except ValueError:
+        print(" Invalid amount! Please enter a number.")
+        return
 
-    print("Expense added successfully.")
+    description = input("Description: ").strip()
+    date = datetime.now().strftime("%Y-%m-%d")
+
+    # Generate a unique ID based on the last row's ID
+    existing_data = _load_expenses()
+    next_id = int(existing_data[-1]["ID"]) + 1 if existing_data else 1
+
+    new_expense = {
+        "ID": str(next_id),
+        "Date": date,
+        "Category": category,
+        "Amount": f"{amount:.2f}",
+        "Description": description,
+    }
+
+    try:
+        with open(FILE_NAME, "a", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=FIELDS)
+            writer.writerow(new_expense)
+        print("Expense added successfully.")
+    except IOError:
+        print("Could not save expense.")
 
 
 def view_expenses():
     print("\n--- All Expenses ---")
+    data = _load_expenses()
 
-    with open(FILE_NAME, "r") as file:
-        reader = csv.reader(file)
+    if not data:
+        print("No expenses found.")
+        return
 
-        rows = list(reader)
-
-        if len(rows) <= 1:
-            print("No expenses found.")
-            return
-
+    print(
+        f"\n{'ID':<5} {'Date':<12} {'Category':<15} {'Amount':<10} Description"
+    )
+    print("-" * 65)
+    for row in data:
         print(
-            f"\n{'Date':<12} {'Category':<15} {'Amount':<10} Description"
+            f"{row['ID']:<5} {row['Date']:<12} {row['Category']:<15} ₹{float(row['Amount']):<9.2f} {row['Description']}"
         )
-        print("-" * 60)
-
-        for row in rows[1:]:
-            print(
-                f"{row[0]:<12} {row[1]:<15} ₹{row[2]:<9} {row[3]}"
-            )
 
 
 def total_expense():
-    total = 0
-
-    with open(FILE_NAME, "r") as file:
-        reader = csv.DictReader(file)
-
-        for row in reader:
-            total += float(row["Amount"])
-
+    data = _load_expenses()
+    total = sum(float(row["Amount"]) for row in data)
     print(f"\nTotal Expense: ₹{total:.2f}")
 
 
 def category_summary():
-    summary = {}
-
-    with open(FILE_NAME, "r") as file:
-        reader = csv.DictReader(file)
-
-        for row in reader:
-            category = row["Category"]
-            amount = float(row["Amount"])
-
-            if category in summary:
-                summary[category] += amount
-            else:
-                summary[category] = amount
-
-    if not summary:
+    data = _load_expenses()
+    if not data:
         print("No data available.")
         return
 
-    print("\n--- Category Summary ---")
+    summary = {}
+    for row in data:
+        cat = row["Category"]
+        summary[cat] = summary.get(cat, 0.0) + float(row["Amount"])
 
+    print("\n--- Category Summary ---")
     for category, amount in summary.items():
         print(f"{category:<20} ₹{amount:.2f}")
 
 
 def monthly_summary():
-    monthly = {}
-
-    with open(FILE_NAME, "r") as file:
-        reader = csv.DictReader(file)
-
-        for row in reader:
-            month = row["Date"][:7]
-            amount = float(row["Amount"])
-
-            if month in monthly:
-                monthly[month] += amount
-            else:
-                monthly[month] = amount
-
-    if not monthly:
+    data = _load_expenses()
+    if not data:
         print("No data available.")
         return
 
-    print("\n--- Monthly Summary ---")
+    monthly = {}
+    for row in data:
+        month = row["Date"][:7]  # Extracts YYYY-MM
+        monthly[month] = monthly.get(month, 0.0) + float(row["Amount"])
 
-    for month, amount in monthly.items():
+    print("\n--- Monthly Summary ---")
+    for month, amount in sorted(monthly.items()):
         print(f"{month:<10} ₹{amount:.2f}")
 
 
 def highest_expense():
-    highest = None
-
-    with open(FILE_NAME, "r") as file:
-        reader = csv.DictReader(file)
-
-        for row in reader:
-            if highest is None:
-                highest = row
-            elif float(row["Amount"]) > float(highest["Amount"]):
-                highest = row
-
-    if highest:
-        print("\n--- Highest Expense ---")
-        print(f"Date       : {highest['Date']}")
-        print(f"Category   : {highest['Category']}")
-        print(f"Amount     : ₹{highest['Amount']}")
-        print(f"Description: {highest['Description']}")
-    else:
+    data = _load_expenses()
+    if not data:
         print("No expenses available.")
+        return
+
+    highest = max(data, key=lambda x: float(x["Amount"]))
+
+    print("\n--- Highest Expense ---")
+    print(f"ID         : {highest['ID']}")
+    print(f"Date       : {highest['Date']}")
+    print(f"Category   : {highest['Category']}")
+    print(f"Amount     : ₹{float(highest['Amount']):.2f}")
+    print(f"Description: {highest['Description']}")
 
 
 def search_category():
-    category_name = input("\nEnter category to search: ")
+    category_name = input("\nEnter category to search: ").strip().lower()
+    data = _load_expenses()
 
-    found = False
+    results = [
+        r for r in data if r["Category"].lower() == category_name
+    ]
 
-    with open(FILE_NAME, "r") as file:
-        reader = csv.DictReader(file)
-
-        print("\nResults:")
-        print("-" * 50)
-
-        for row in reader:
-            if row["Category"].lower() == category_name.lower():
-                found = True
-                print(
-                    f"{row['Date']} | "
-                    f"{row['Category']} | "
-                    f"₹{row['Amount']} | "
-                    f"{row['Description']}"
-                )
-
-    if not found:
+    if not results:
         print("No records found.")
+        return
+
+    print("\nResults:")
+    print("-" * 60)
+    for row in results:
+        print(
+            f"{row['Date']} | {row['Category']} | ₹{float(row['Amount']):.2f} | {row['Description']}"
+        )
 
 
 def delete_expense():
     view_expenses()
+    data = _load_expenses()
+    if not data:
+        return
 
-    date = input(
-        "\nEnter date of expense to delete (YYYY-MM-DD): "
-    )
+    target_id = input("\nEnter ID of expense to delete: ").strip()
 
-    rows = []
+    # Filter out the item to delete
+    updated_data = [row for row in data if row["ID"] != target_id]
 
-    deleted = False
-
-    with open(FILE_NAME, "r") as file:
-        reader = csv.reader(file)
-
-        header = next(reader)
-        rows.append(header)
-
-        for row in reader:
-            if row[0] == date and not deleted:
-                deleted = True
-                continue
-
-            rows.append(row)
-
-    with open(FILE_NAME, "w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerows(rows)
-
-    if deleted:
-        print("Expense deleted.")
+    if len(updated_data) == len(data):
+        print("Expense ID not found.")
     else:
-        print("Expense not found.")
+        _save_expenses(updated_data)
+        print("Expense deleted successfully.")
 
 
 def export_report():
     report_name = "expense_report.txt"
+    data = _load_expenses()
 
-    total = 0
+    if not data:
+        print("No data to export.")
+        return
 
-    with open(FILE_NAME, "r") as file:
-        reader = csv.DictReader(file)
+    total = sum(float(row["Amount"]) for row in data)
 
-        data = list(reader)
-
-        for row in data:
-            total += float(row["Amount"])
-
-    with open(report_name, "w") as report:
-        report.write("SMART EXPENSE TRACKER REPORT\n")
-        report.write("=" * 35 + "\n\n")
-
-        for row in data:
+    try:
+        with open(report_name, "w", encoding="utf-8") as report:
+            report.write("SMART EXPENSE TRACKER REPORT\n")
+            report.write("=" * 45 + "\n\n")
             report.write(
-                f"{row['Date']} | "
-                f"{row['Category']} | "
-                f"₹{row['Amount']} | "
-                f"{row['Description']}\n"
+                f"{'Date':<12} | {'Category':<15} | {'Amount':<10} | Description\n"
             )
+            report.write("-" * 55 + "\n")
 
-        report.write("\n")
-        report.write(f"TOTAL EXPENSE = ₹{total:.2f}\n")
+            for row in data:
+                report.write(
+                    f"{row['Date']:<12} | {row['Category']:<15} | ₹{float(row['Amount']):<9.2f} | {row['Description']}\n"
+                )
 
-    print(f"Report exported as {report_name}")
+            report.write("\n" + "=" * 45 + "\n")
+            report.write(f"TOTAL EXPENSE = ₹{total:.2f}\n")
+
+        print(f"📄 Report exported successfully as {report_name}")
+    except IOError:
+        print("Failed to write report file.")
 
 
 def menu():
     while True:
-        print("\n")
-        print("=" * 40)
-        print("SMART EXPENSE TRACKER")
+        print("\n" + "=" * 40)
+        print("        SMART EXPENSE TRACKER")
         print("=" * 40)
         print("1. Add Expense")
         print("2. View Expenses")
@@ -248,42 +236,33 @@ def menu():
         print("9. Export Report")
         print("0. Exit")
 
-        choice = input("\nEnter choice: ")
+        choice = input("\nEnter choice: ").strip()
 
         if choice == "1":
             add_expense()
-
         elif choice == "2":
             view_expenses()
-
         elif choice == "3":
             total_expense()
-
         elif choice == "4":
             category_summary()
-
         elif choice == "5":
             monthly_summary()
-
         elif choice == "6":
             highest_expense()
-
         elif choice == "7":
             search_category()
-
         elif choice == "8":
             delete_expense()
-
         elif choice == "9":
             export_report()
-
         elif choice == "0":
             print("Goodbye!")
             break
-
         else:
-            print("Invalid choice.")
+            print("❌ Invalid choice. Please try again.")
 
 
-initialize_file()
-menu()
+if __name__ == "__main__":
+    initialize_file()
+    menu()
