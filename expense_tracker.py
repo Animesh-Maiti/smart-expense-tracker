@@ -59,13 +59,13 @@ def set_budget():
         print("Invalid input! Please enter a numeric value.")
 
 
-def _check_budget_alerts(new_amount=0.0):
+def _check_budget_alerts(data, new_amount=0.0):
+    """Modified to accept pre-loaded data instead of reading the file again."""
     budget = _get_budget()
     if budget == 0.0:
         return
 
     current_month = datetime.now().strftime("%Y-%m")
-    data = _load_expenses()
 
     spent = sum(
         float(row["Amount"])
@@ -104,9 +104,13 @@ def add_expense():
     description = input("Description: ").strip()
     date = datetime.now().strftime("%Y-%m-%d")
 
-    _check_budget_alerts(amount)
-
+    # Optimization: Load the data ONCE right here
     existing_data = _load_expenses()
+
+    # Pass the already loaded data into the alert check
+    _check_budget_alerts(existing_data, amount)
+
+    # Reuse the same loaded data to find the next ID
     next_id = int(existing_data[-1]["ID"]) + 1 if existing_data else 1
 
     new_expense = {
@@ -124,7 +128,6 @@ def add_expense():
         print("Expense added successfully.")
     except IOError:
         print("Could not save expense.")
-
 
 def view_expenses():
     print("\n--- All Expenses ---")
