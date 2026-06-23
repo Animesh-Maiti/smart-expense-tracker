@@ -6,6 +6,24 @@ FILE_NAME = "expenses.csv"
 BUDGET_FILE = "budget.txt"
 FIELDS = ["ID", "Date", "Category", "Amount", "Description"]
 
+APP_STATE = {
+    "expenses": [],
+    "budget": 0.0,
+    "month_spent": 0.0
+}
+
+def update_app_state():
+    """Helper to refresh the in-memory cache when files change."""
+    APP_STATE["expenses"] = _load_expenses()
+    APP_STATE["budget"] = _get_budget()
+    
+    current_month = datetime.now().strftime("%Y-%m")
+    APP_STATE["month_spent"] = sum(
+        float(row["Amount"])
+        for row in APP_STATE["expenses"]
+        if row["Date"].startswith(current_month)
+    )
+
 
 def initialize_file():
     if not os.path.exists(FILE_NAME):
